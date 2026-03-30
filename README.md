@@ -28,7 +28,7 @@
 
 ## 🔗 プレイ
 
-（公開後にURLをここに記載）
+https://miyuslav.github.io/sabaocatch/
 
 ## 関連
 
