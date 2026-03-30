@@ -44,10 +44,10 @@ html,body { width:100%; height:100%; overflow:hidden; background:#1a1a2e; font-f
     <div class="op-hint">← → キー ／ マウス ／ 傾き で操作</div>
   </div>
   <div class="overlay" id="gameover-screen" style="display:none;">
-    <div class="gameover-title">💀 鯖男、逝った</div>
+    <div class="gameover-title">💀 鯖男、憤死‥</div>
     <div class="score-badge" id="score-val">0点</div>
     <div class="score-sub">🏆 最高記録: <span id="hi-val">0</span>点</div>
-    <div class="gameover-msg">最後まで凶暴だった</div>
+    <div class="gameover-msg">まだ足りない</div>
     <button class="btn-retry" onclick="startGame()">▶ もう一回</button>
     <button class="btn-outline" onclick="startGame()">はじめから</button>
   </div>
@@ -88,6 +88,132 @@ window.addEventListener('keyup',e=>{if(e.key==='ArrowLeft'||e.key==='a')keys.lef
 canvas.addEventListener('mousemove',e=>{const r=canvas.getBoundingClientRect();catX=(e.clientX-r.left)*(W/canvas.width);catVX=0;});
 canvas.addEventListener('touchmove',e=>{e.preventDefault();const r=canvas.getBoundingClientRect();catX=(e.touches[0].clientX-r.left)*(W/canvas.width);catVX=0;},{passive:false});
 
+// ===== サウンドシステム =====
+let audioCtx=null;
+let bgmNodes=null;
+
+function getAudio(){
+  if(!audioCtx) audioCtx=new(window.AudioContext||window.webkitAudioContext)();
+  return audioCtx;
+}
+
+// ビープ音ユーティリティ
+function beep(freq,type,dur,vol,delay=0,when=null){
+  const ac=getAudio();
+  const t=(when||ac.currentTime)+delay;
+  const o=ac.createOscillator();
+  const g=ac.createGain();
+  o.connect(g);g.connect(ac.destination);
+  o.type=type;o.frequency.setValueAtTime(freq,t);
+  g.gain.setValueAtTime(vol,t);
+  g.gain.exponentialRampToValueAtTime(0.001,t+dur);
+  o.start(t);o.stop(t+dur+0.05);
+}
+
+// キャッチ音（明るいピコン）
+function playCatch(isFish){
+  const ac=getAudio();
+  if(isFish){
+    beep(880,'sine',0.08,0.3);
+    beep(1320,'sine',0.08,0.2,0.06);
+    beep(1760,'sine',0.1,0.15,0.12);
+  } else {
+    beep(660,'sine',0.06,0.25);
+    beep(880,'sine',0.08,0.15,0.05);
+  }
+}
+
+// ブチギレ音（低いうなり→シャー）
+function playRage(){
+  const ac=getAudio();
+  const t=ac.currentTime;
+  // 低音うなり
+  const o=ac.createOscillator();
+  const g=ac.createGain();
+  o.connect(g);g.connect(ac.destination);
+  o.type='sawtooth';
+  o.frequency.setValueAtTime(80,t);
+  o.frequency.exponentialRampToValueAtTime(200,t+0.15);
+  g.gain.setValueAtTime(0.3,t);
+  g.gain.exponentialRampToValueAtTime(0.001,t+0.25);
+  o.start(t);o.stop(t+0.3);
+  // 高音シャー
+  beep(1200,'sawtooth',0.15,0.2,0.1);
+  beep(1600,'sawtooth',0.1,0.15,0.18);
+}
+
+// ゲームオーバー音（下降音）
+function playGameOver(){
+  const ac=getAudio();
+  [440,330,220,150,100].forEach((f,i)=>{
+    beep(f,'sawtooth',0.2,0.25,i*0.13);
+  });
+}
+
+// BGM（ループするシンプルなメロディ）
+function startBGM(){
+  if(bgmNodes) return;
+  const ac=getAudio();
+  bgmNodes=[];
+
+  // ベースライン
+  const bassNotes=[55,55,65,55,49,55,65,55];
+  const noteDur=0.18;
+  const tempo=0.22;
+
+  function scheduleBass(startTime){
+    bassNotes.forEach((f,i)=>{
+      const t=startTime+i*tempo;
+      const o=ac.createOscillator();
+      const g=ac.createGain();
+      o.connect(g);g.connect(ac.destination);
+      o.type='square';
+      o.frequency.setValueAtTime(f,t);
+      g.gain.setValueAtTime(0.06,t);
+      g.gain.exponentialRampToValueAtTime(0.001,t+noteDur);
+      o.start(t);o.stop(t+noteDur+0.02);
+      bgmNodes.push(o);
+    });
+  }
+
+  // メロディ
+  const melNotes=[523,659,784,659,523,392,440,523];
+  function scheduleMel(startTime){
+    melNotes.forEach((f,i)=>{
+      const t=startTime+i*tempo+tempo*0.5;
+      const o=ac.createOscillator();
+      const g=ac.createGain();
+      o.connect(g);g.connect(ac.destination);
+      o.type='triangle';
+      o.frequency.setValueAtTime(f,t);
+      g.gain.setValueAtTime(0.08,t);
+      g.gain.exponentialRampToValueAtTime(0.001,t+noteDur*0.8);
+      o.start(t);o.stop(t+noteDur);
+      bgmNodes.push(o);
+    });
+  }
+
+  let loopStart=ac.currentTime;
+  const loopDur=bassNotes.length*tempo;
+
+  function scheduleLoop(){
+    if(!bgmNodes) return;
+    scheduleBass(loopStart);
+    scheduleMel(loopStart);
+    loopStart+=loopDur;
+    setTimeout(scheduleLoop, (loopDur-0.1)*1000);
+  }
+  scheduleLoop();
+}
+
+function stopBGM(){
+  if(bgmNodes){
+    bgmNodes.forEach(o=>{try{o.stop();}catch(e){}});
+    bgmNodes=null;
+  }
+}
+// ===== サウンドここまで =====
+
 function requestTilt(){
   if(typeof DeviceMotionEvent!=='undefined'&&typeof DeviceMotionEvent.requestPermission==='function'){
     DeviceMotionEvent.requestPermission().then(r=>{if(r==='granted')window.addEventListener('deviceorientation',e=>{if(e.gamma!==null)tiltX=Math.max(-30,Math.min(30,e.gamma));});}).catch(()=>{});
@@ -100,10 +226,16 @@ function startGame(){
   document.getElementById('start-screen').style.display='none';
   document.getElementById('gameover-screen').style.display='none';
   score=0;miss=0;frame=0;catX=W/2;catVX=0;tiltX=0;items=[];particles=[];
-  rageAnim=0;rageShake=0;running=true;requestTilt();canvas.focus();loop();
+  rageAnim=0;rageShake=0;
+  stopBGM();
+  getAudio(); // iOSはユーザー操作でAudioContext起動
+  startBGM();
+  running=true;requestTilt();canvas.focus();loop();
 }
 function gameOver(){
   running=false;
+  stopBGM();
+  playGameOver();
   if(score>hiScore)hiScore=score;
   document.getElementById('score-val').textContent=score+'点';
   document.getElementById('hi-val').textContent=hiScore;
@@ -111,7 +243,8 @@ function gameOver(){
 }
 function triggerRage(){
   rageAnim=60;rageShake=18;
-  const words=['シャーーッ！','シャッ！！','シャーッ！！','にゃーーッ！！'];
+  playRage();
+  const words=['シャーーッ！','シャッ！！','シャーッ！！','にゃーっ！！'];
   addText(catX,CAT_Y-80,words[Math.floor(Math.random()*words.length)],'#ff3333');
   for(let i=0;i<12;i++){const a=Math.random()*Math.PI*2,spd=2+Math.random()*4;particles.push({x:catX,y:CAT_Y-40,vx:Math.cos(a)*spd,vy:Math.sin(a)*spd,life:1,color:'#ff4444',isText:false,size:4});}
 }
@@ -252,7 +385,7 @@ function loop(){
     const dx=item.x-catX,dy=item.y-mouthY,hitR=item.type==='poop'?44:30;
     if(Math.sqrt(dx*dx+dy*dy)<hitR){
       if(item.type==='poop'){miss++;triggerRage();if(miss>=3){setTimeout(gameOver,600);running=false;}}
-      else{const pts=item.type==='fish'?3:1;score+=pts;addText(item.x,item.y,item.type==='fish'?'🐟+3':'🍣+1','#f9a825');addParticle(item.x,item.y,true);}
+      else{const pts=item.type==='fish'?3:1;score+=pts;playCatch(item.type==='fish');addText(item.x,item.y,item.type==='fish'?'🐟+3':'🍣+1','#f9a825');addParticle(item.x,item.y,true);}
       return false;
     }
     if(item.y>H+40){
