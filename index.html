@@ -6,10 +6,10 @@
 <title>サバオキャッチ</title>
 <style>
 * { box-sizing:border-box; margin:0; padding:0; }
-html,body { width:100%; height:100%; overflow:hidden; background:#1a1a2e; font-family:sans-serif; -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; display:flex; align-items:center; justify-content:center; }
-#wrap { position:relative; }
-#gc { display:block; }
-#ui { position:absolute; top:0; left:0; display:flex; align-items:center; justify-content:center; overflow:hidden; }
+html,body { width:100%; height:100%; overflow:hidden; background:#1a1a2e; font-family:sans-serif; -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; }
+#wrap { position:fixed; top:0; left:0; width:100%; height:100%; }
+#gc { position:absolute; top:0; left:0; width:100%; height:100%; display:block; }
+#ui { position:absolute; top:0; left:0; width:100%; height:100%; display:flex; align-items:center; justify-content:center; overflow:hidden; }
 .overlay { background:rgba(10,10,30,0.95); border-radius:20px; padding:24px 20px; text-align:center; color:#fff; pointer-events:all; border:1px solid rgba(255,255,255,0.15); width:240px; display:flex; flex-direction:column; align-items:center; }
 .overlay h2 { font-size:18px; font-weight:700; margin-bottom:4px; }
 .sub { font-size:11px; color:#88ccff; margin-bottom:14px; letter-spacing:1px; }
@@ -59,23 +59,21 @@ const canvas=document.getElementById('gc');
 const ctx=canvas.getContext('2d');
 const W=320,H=480;
 
-// 画面サイズに合わせてcanvasを拡大
+// 画面いっぱいにcanvasをリサイズ
 function resizeCanvas(){
   const sw=window.innerWidth, sh=window.innerHeight;
-  const scale=Math.min(sw/W, sh/H);
-  const cw=Math.floor(W*scale), ch=Math.floor(H*scale);
-  const wrap=document.getElementById('wrap');
-  wrap.style.width=cw+'px';
-  wrap.style.height=ch+'px';
-  canvas.style.width=cw+'px';
-  canvas.style.height=ch+'px';
+  canvas.width=sw;
+  canvas.height=sh;
+  // ゲーム座標系(320x480)から画面座標系へのスケール
+  const sx=sw/W, sy=sh/H;
+  canvas._sx=sx; canvas._sy=sy;
   const ui=document.getElementById('ui');
-  ui.style.width=cw+'px';
-  ui.style.height=ch+'px';
+  ui.style.width=sw+'px';
+  ui.style.height=sh+'px';
 }
 resizeCanvas();
 window.addEventListener('resize', resizeCanvas);
-window.addEventListener('orientationchange', ()=>setTimeout(resizeCanvas,100));
+window.addEventListener('orientationchange', ()=>setTimeout(resizeCanvas,200));
 
 const C={base:'#c8922a',stripe:'#7a4e10',belly:'#f5e0b0',nose:'#e8a0a0',eye:'#e6c800',eyeA:'#ffdd00',pupil:'#1a0000',inner:'#f0c0a0',out:'#5a3a0a'};
 let running=false,score=0,miss=0,frame=0,hiScore=0;
@@ -87,8 +85,8 @@ let rageAnim=0,rageShake=0;
 
 window.addEventListener('keydown',e=>{if(e.key==='ArrowLeft'||e.key==='a')keys.left=true;if(e.key==='ArrowRight'||e.key==='d')keys.right=true;});
 window.addEventListener('keyup',e=>{if(e.key==='ArrowLeft'||e.key==='a')keys.left=false;if(e.key==='ArrowRight'||e.key==='d')keys.right=false;});
-canvas.addEventListener('mousemove',e=>{const r=canvas.getBoundingClientRect();catX=(e.clientX-r.left)*(W/r.width);catVX=0;});
-canvas.addEventListener('touchmove',e=>{e.preventDefault();const r=canvas.getBoundingClientRect();catX=(e.touches[0].clientX-r.left)*(W/r.width);catVX=0;},{passive:false});
+canvas.addEventListener('mousemove',e=>{const r=canvas.getBoundingClientRect();catX=(e.clientX-r.left)*(W/canvas.width);catVX=0;});
+canvas.addEventListener('touchmove',e=>{e.preventDefault();const r=canvas.getBoundingClientRect();catX=(e.touches[0].clientX-r.left)*(W/canvas.width);catVX=0;},{passive:false});
 
 function requestTilt(){
   if(typeof DeviceMotionEvent!=='undefined'&&typeof DeviceMotionEvent.requestPermission==='function'){
@@ -234,10 +232,14 @@ function drawBG(){
 function loop(){
   if(!running)return;frame++;
   if(rageAnim>0)rageAnim--;if(rageShake>0)rageShake--;
-  ctx.clearRect(0,0,W,H);
-  const sx=rageShake>0?(Math.random()-0.5)*rageShake*0.5:0;
-  const sy=rageShake>0?(Math.random()-0.5)*rageShake*0.3:0;
-  ctx.save();ctx.translate(sx,sy);
+  const cw=canvas.width, ch=canvas.height;
+  const sx=cw/W, sy=ch/H;
+  ctx.clearRect(0,0,cw,ch);
+  ctx.save();
+  ctx.scale(sx,sy);
+  const shx=rageShake>0?(Math.random()-0.5)*rageShake*0.5:0;
+  const shy=rageShake>0?(Math.random()-0.5)*rageShake*0.3:0;
+  ctx.save();ctx.translate(shx,shy);
   drawBG();
   if(keys.left)catVX-=5;if(keys.right)catVX+=5;
   if(!keys.left&&!keys.right&&Math.abs(tiltX)>2)catVX+=tiltX*0.25;
@@ -276,12 +278,18 @@ function loop(){
   ctx.fillStyle='#fff';ctx.font='bold 13px sans-serif';
   ctx.textAlign='left';ctx.fillText(`🍣 ${score}`,12,22);
   ctx.textAlign='right';ctx.fillText(miss===0?'♥♥♥':miss===1?'♥♥♡':'♥♡♡',W-12,22);
-  ctx.restore();
+  ctx.restore();ctx.restore();
   requestAnimationFrame(loop);
 }
 
-drawBG();
+resizeCanvas();
+const _isx=canvas.width/W, _isy=canvas.height/H;
+ctx.save();ctx.scale(_isx,_isy);
+ctx.fillStyle=`rgb(26,58,42)`;ctx.fillRect(0,0,W,H);
+ctx.fillStyle='#2d5a1a';ctx.fillRect(0,H-24,W,24);
+ctx.fillStyle='rgba(0,0,0,0.4)';ctx.fillRect(0,0,W,34);
 ctx.save();ctx.translate(W/2,CAT_Y);ctx.scale(CAT_SCALE,CAT_SCALE);ctx.translate(0,-24);drawCatBody();ctx.restore();
+ctx.restore();
 </script>
 </body>
 </html>
