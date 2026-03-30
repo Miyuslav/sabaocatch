@@ -64,6 +64,9 @@ function resizeCanvas(){
   const sw=window.innerWidth, sh=window.innerHeight;
   const scale=Math.min(sw/W, sh/H);
   const cw=Math.floor(W*scale), ch=Math.floor(H*scale);
+  const wrap=document.getElementById('wrap');
+  wrap.style.width=cw+'px';
+  wrap.style.height=ch+'px';
   canvas.style.width=cw+'px';
   canvas.style.height=ch+'px';
   const ui=document.getElementById('ui');
@@ -72,6 +75,7 @@ function resizeCanvas(){
 }
 resizeCanvas();
 window.addEventListener('resize', resizeCanvas);
+window.addEventListener('orientationchange', ()=>setTimeout(resizeCanvas,100));
 
 const C={base:'#c8922a',stripe:'#7a4e10',belly:'#f5e0b0',nose:'#e8a0a0',eye:'#e6c800',eyeA:'#ffdd00',pupil:'#1a0000',inner:'#f0c0a0',out:'#5a3a0a'};
 let running=false,score=0,miss=0,frame=0,hiScore=0;
